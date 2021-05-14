@@ -1,3 +1,5 @@
+#include <platform/app.hh>
+
 #include "system/ivideo.hh"
 #include "core/cvar.hh"
 #include "config.hh"
@@ -30,6 +32,7 @@ namespace {
 #endif
 
   SDL_GameController *s_controller {};
+  SDL_JoystickID s_controller_id = 0;
 
   /**
    * Convert mode to a valid mode.
@@ -64,6 +67,7 @@ namespace {
 
       void m_init_mode(const VideoMode&);
       void m_change_mode(const VideoMode&);
+      void init_game_controller(void);
 
   public:
       SdlVideo(OpenGLVer ver);
@@ -179,6 +183,55 @@ int SdlVideo::m_mouse_accel(int val) {
     return static_cast<int>(pow(static_cast<float>(val), factor));
 }
 
+void SdlVideo::init_game_controller(){
+	Optional<String> path = app::find_data_file("gamecontrollerdb.txt");
+
+	if(path){
+		const char *str = path.value().c_str();
+
+		log::info("Loading controller mappings from: {}", str);
+
+		int result = SDL_GameControllerAddMappingsFromFile(str);
+
+		if(result > 0){
+			log::info("Controller mappings found: {}", result);
+		}
+		else if(result < 0){
+			log::warn("Failed to load controller mappings: {}", SDL_GetError());
+		}
+	}
+
+	int joystickCount = SDL_NumJoysticks();
+
+	if(joystickCount > 0){
+		int index = 0;
+
+		while(s_controller == NULL && index < joystickCount){
+			if(SDL_IsGameController(index)){
+				s_controller = SDL_GameControllerOpen(index);
+
+				if(s_controller){
+					log::info("Controller added: {}", SDL_GameControllerNameForIndex(index));
+
+					s_controller_id = SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(s_controller));
+				}
+				else{
+					log::warn("Failed to open controller {}: {}", index, SDL_GetError());
+				}
+			}
+
+			index++;
+		}
+
+		if(s_controller == NULL){
+			log::info("No Controllers found");
+		}
+	}
+	else{
+		log::info("No Controllers found");
+	}
+}
+
 //
 // SdlVideo::SdlVideo
 //
@@ -220,6 +273,8 @@ SdlVideo::SdlVideo(OpenGLVer opengl):
     }
 
     set_mode(mode);
+
+    init_game_controller();
 }
 
 //
@@ -468,14 +523,31 @@ void SdlVideo::begin_frame()
             break;
 
         case SDL_CONTROLLERDEVICEADDED:
-            log::info("Controller added: {}", SDL_GameControllerNameForIndex(e.cdevice.which));
+	    if(s_controller == NULL){
             s_controller = SDL_GameControllerOpen(e.cdevice.which);
+
+		    if(s_controller){
+			    log::info("Controller added: {}", SDL_GameControllerNameForIndex(e.cdevice.which));
+
+			    s_controller_id = SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(s_controller));
+		    }
+		    else{
+			log::warn("Failed to open controller: {}", SDL_GetError());
+		    }
+
             assert(s_controller);
+	    }
             break;
 
         case SDL_CONTROLLERDEVICEREMOVED:
+	    if(s_controller_id == e.cdevice.which){
+		    SDL_GameControllerClose(s_controller);
+
             log::info("Controlled removed");
+
             s_controller = nullptr;
+		    s_controller_id = 0;
+	    }
             break;
 
         case SDL_CONTROLLERBUTTONDOWN:

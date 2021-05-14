@@ -1025,8 +1025,7 @@ dboolean G_Responder(event_t* ev) {
         }
 
         if(demoplayback && gameaction == ga_nothing) {
-            if(ev->type == ev_keydown ||
-                    ev->type == ev_gamepad) {
+            if(ev->type == ev_keydown) {
                 G_CheckDemoStatus();
                 gameaction = ga_warpquick;
                 return true;
@@ -1049,8 +1048,7 @@ dboolean G_Responder(event_t* ev) {
     if(gamestate == GS_SKIPPABLE) {
         if(gameaction == ga_nothing) {
             if(ev->type == ev_keydown ||
-                    (ev->type == ev_mouse && ev->data1) ||
-                    ev->type == ev_gamepad) {
+                    (ev->type == ev_mouse && ev->data1)) {
                 gameaction = ga_title;
                 return true;
             }
